@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Credit Risk Modeling with Graph ML - Das et al. (2023)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header .subtitle {
+            color: #666;
+            font-size: 1.1em;
+            margin-bottom: 15px;
+        }
+        
+        .header .paper-ref {
+            background: #f0f4ff;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            margin-top: 15px;
+        }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        @media (max-width: 768px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .icon {
+            font-size: 1.5em;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+        
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .results {
+            margin-top: 30px;
+        }
+        
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .result-item .label {
+            color: #666;
+            font-weight: 500;
+        }
+        
+        .result-item .value {
+            color: #333;
+            font-weight: 600;
+        }
+        
+        .rating-badge {
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 1.2em;
+        }
+        
+        .rating-aaa { background: #10b981; color: white; }
+        .rating-aa { background: #34d399; color: white; }
+        .rating-a { background: #6ee7b7; color: white; }
+        .rating-bbb { background: #fbbf24; color: white; }
+        .rating-bb { background: #f59e0b; color: white; }
+        .rating-b { background: #ef4444; color: white; }
+        .rating-ccc { background: #dc2626; color: white; }
+        
+        .risk-badge {
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+        
+        .risk-low { background: #d1fae5; color: #065f46; }
+        .risk-medium { background: #fed7aa; color: #92400e; }
+        .risk-high { background: #fecaca; color: #991b1b; }
+        .risk-very-high { background: #dc2626; color: white; }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .stat-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        
+        .stat-box .number {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .stat-box .label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        
+        .recommendations {
+            margin-top: 20px;
+        }
+        
+        .recommendation-item {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .loading.active {
+            display: block;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .tab-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            background: #f0f0f0;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 Credit Risk Modeling with Graph Machine Learning</h1>
+            <div class="subtitle">Advanced credit risk assessment using Graph Neural Networks</div>
+            <div class="paper-ref">
+                <strong>📚 For education purposes only </strong> . 
+                
+            </div>
+        </div>
+
+        <div class="main-grid">
+            <!-- Prediction Panel -->
+            <div class="card">
+                <h2><span class="icon">🔮</span> Credit Risk Prediction</h2>
+                
+                <div class="tab-container">
+                    <button class="tab active" onclick="switchTab('simple')">Simple Entry</button>
+                    <button class="tab" onclick="switchTab('detailed')">Detailed Ratios</button>
+                    <button class="tab" onclick="switchTab('dataset')">From Dataset</button>
+                </div>
+
+                <!-- Simple Entry Tab -->
+                <div id="simple-tab" class="tab-content active">
+                    <form id="simple-form">
+                        <div class="form-group">
+                            <label>Company Name</label>
+                            <input type="text" id="company_name" value="Sample Corporation" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Return on Assets (%)</label>
+                            <input type="number" id="roa" step="0.01" value="5.5" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Debt Ratio</label>
+                            <input type="number" id="debt_ratio" step="0.01" value="0.45" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Current Ratio</label>
+                            <input type="number" id="current_ratio" step="0.01" value="1.8" required>
+                        </div>
+                        <button type="submit" class="btn">Predict Credit Risk</button>
+                    </form>
+                </div>
+
+                <!-- Detailed Ratios Tab -->
+                <div id="detailed-tab" class="tab-content">
+                    <form id="detailed-form">
+                        <div class="form-group">
+                            <label>Company Name</label>
+                            <input type="text" id="detailed_company_name" value="Detailed Corp" required>
+                        </div>
+                        <h3 style="margin: 20px 0 10px 0; color: #667eea;">Profitability Ratios</h3>
+                        <div class="form-group">
+                            <label>Return on Assets</label>
+                            <input type="number" step="0.001" id="returnOnAssets" value="0.055" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Return on Equity</label>
+                            <input type="number" step="0.001" id="returnOnEquity" value="0.12" required>
+                        </div>
+                        
+                        <h3 style="margin: 20px 0 10px 0; color: #667eea;">Debt Ratios</h3>
+                        <div class="form-group">
+                            <label>Debt Ratio</label>
+                            <input type="number" step="0.001" id="debtRatio" value="0.45" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Debt-to-Equity Ratio</label>
+                            <input type="number" step="0.001" id="debtEquityRatio" value="0.82" required>
+                        </div>
+                        
+                        <h3 style="margin: 20px 0 10px 0; color: #667eea;">Liquidity Ratios</h3>
+                        <div class="form-group">
+                            <label>Current Ratio</label>
+                            <input type="number" step="0.001" id="currentRatio" value="1.8" required>
+                        </div>
+                        
+                        <button type="submit" class="btn">Predict Credit Risk</button>
+                    </form>
+                </div>
+
+                <!-- Dataset Tab -->
+                <div id="dataset-tab" class="tab-content">
+                    <form id="dataset-form">
+                        <div class="form-group">
+                            <label>Select Company from Dataset</label>
+                            <select id="company_select">
+                                <option value="">Loading companies...</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn">Predict from Dataset</button>
+                    </form>
+                </div>
+
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <div>Analyzing credit risk...</div>
+                </div>
+            </div>
+
+            <!-- Results Panel -->
+            <div class="card">
+                <h2><span class="icon">📊</span> Prediction Results</h2>
+                <div id="results" class="results">
+                    <p style="text-align: center; color: #999; padding: 40px 0;">
+                        Enter company information and click "Predict Credit Risk" to see results
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Dashboard -->
+        <div class="card">
+            <h2><span class="icon">📈</span> System Statistics</h2>
+            <div class="stats-grid" id="stats-grid">
+                <div class="stat-box">
+                    <div class="number" id="stat-companies">-</div>
+                    <div class="label">Total Companies</div>
+                </div>
+                <div class="stat-box">
+                    <div class="number" id="stat-features">-</div>
+                    <div class="label">Financial Features</div>
+                </div>
+                <div class="stat-box">
+                    <div class="number" id="stat-predictions">-</div>
+                    <div class="label">Total Predictions</div>
+                </div>
+                <div class="stat-box">
+                    <div class="number" id="stat-avg-score">-</div>
+                    <div class="label">Avg Credit Score</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Use relative URL for API (works better with different deployments)
+        const API_URL = window.location.origin + '/api';
+
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabName + '-tab').classList.add('active');
+        }
+
+        // Load statistics
+        async function loadStatistics() {
+            try {
+                const response = await fetch(`${API_URL}/statistics`);
+                const data = await response.json();
+                
+                document.getElementById('stat-companies').textContent = 
+                    data.dataset.total_companies || '-';
+                document.getElementById('stat-features').textContent = 
+                    data.dataset.total_features || '-';
+                document.getElementById('stat-predictions').textContent = 
+                    data.predictions.total_predictions || '0';
+                document.getElementById('stat-avg-score').textContent = 
+                    data.predictions.average_credit_score || '-';
+            } catch (error) {
+                console.error('Error loading statistics:', error);
+            }
+        }
+
+        // Load companies for dataset dropdown
+        async function loadCompanies() {
+            try {
+                const response = await fetch(`${API_URL}/companies?limit=100`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                const select = document.getElementById('company_select');
+                select.innerHTML = '<option value="">Select a company...</option>';
+                
+                if (data.companies && data.companies.length > 0) {
+                    data.companies.forEach(company => {
+                        const option = document.createElement('option');
+                        option.value = company.id;
+                        option.textContent = `${company.name} (${company.rating || 'N/A'})`;
+                        select.appendChild(option);
+                    });
+                } else {
+                    select.innerHTML = '<option value="">No companies available - Run create_sample_data.py first</option>';
+                }
+            } catch (error) {
+                console.error('Error loading companies:', error);
+                const select = document.getElementById('company_select');
+                select.innerHTML = '<option value="">Error loading companies - Check if server is running</option>';
+            }
+        }
+
+        // Make prediction
+        async function makePrediction(formData) {
+            const loading = document.getElementById('loading');
+            const results = document.getElementById('results');
+            
+            loading.classList.add('active');
+            results.innerHTML = '';
+
+            try {
+                const response = await fetch(`${API_URL}/predict`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(formData)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayResults(data);
+                    loadStatistics(); // Refresh stats
+                } else {
+                    results.innerHTML = `
+                        <div style="padding: 20px; background: #fff3cd; border-radius: 8px; border-left: 4px solid #ffc107;">
+                            <strong>⚠️ Error:</strong> ${data.error || 'Unknown error occurred'}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Prediction error:', error);
+                results.innerHTML = `
+                    <div style="padding: 20px; background: #f8d7da; border-radius: 8px; border-left: 4px solid #dc3545;">
+                        <strong>❌ Connection Error:</strong> ${error.message}
+                        <br><br>
+                        <strong>Possible solutions:</strong>
+                        <ul style="margin-top: 10px; margin-left: 20px;">
+                            <li>Make sure the server is running: <code>python app.py</code></li>
+                            <li>Check that you're accessing <code>http://localhost:5000/app</code></li>
+                            <li>Verify all dependencies are installed: <code>pip install -r requirements.txt</code></li>
+                        </ul>
+                    </div>
+                `;
+            } finally {
+                loading.classList.remove('active');
+            }
+        }
+
+        // Display results
+        function displayResults(data) {
+            const ratingClass = data.predicted_rating.toLowerCase();
+            const riskClass = data.risk_level.toLowerCase().replace(' ', '-');
+            
+            let html = `
+                <div class="result-item">
+                    <span class="label">Company:</span>
+                    <span class="value">${data.company_name}</span>
+                </div>
+                <div class="result-item">
+                    <span class="label">Prediction ID:</span>
+                    <span class="value">${data.prediction_id}</span>
+                </div>
+                <div style="text-align: center; margin: 30px 0;">
+                    <div style="margin-bottom: 20px;">
+                        <div style="color: #666; margin-bottom: 10px;">Credit Score</div>
+                        <div style="font-size: 3em; font-weight: bold; color: #667eea;">
+                            ${data.credit_score}
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <span class="rating-badge rating-${ratingClass}">${data.predicted_rating}</span>
+                    </div>
+                    <div>
+                        <span class="risk-badge risk-${riskClass}">${data.risk_level} Risk</span>
+                    </div>
+                </div>
+                <div class="result-item">
+                    <span class="label">Investment Grade:</span>
+                    <span class="value">${data.investment_grade ? 'Yes ✓' : 'No ✗'}</span>
+                </div>
+                <div class="result-item">
+                    <span class="label">IG Probability:</span>
+                    <span class="value">${(data.investment_grade_probability * 100).toFixed(2)}%</span>
+                </div>
+                
+            `;
+
+            if (data.recommendations && data.recommendations.length > 0) {
+                html += '<div class="recommendations"><h3 style="margin-bottom: 15px;">💡 Recommendations</h3>';
+                data.recommendations.forEach(rec => {
+                    html += `<div class="recommendation-item">${rec}</div>`;
+                });
+                html += '</div>';
+            }
+
+            document.getElementById('results').innerHTML = html;
+        }
+
+        // Form handlers
+        document.getElementById('simple-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const formData = {
+                company_name: document.getElementById('company_name').value,
+                returnOnAssets: parseFloat(document.getElementById('roa').value) / 100,
+                debtRatio: parseFloat(document.getElementById('debt_ratio').value),
+                currentRatio: parseFloat(document.getElementById('current_ratio').value)
+            };
+            makePrediction(formData);
+        });
+
+        document.getElementById('detailed-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const formData = {
+                company_name: document.getElementById('detailed_company_name').value,
+                returnOnAssets: parseFloat(document.getElementById('returnOnAssets').value),
+                returnOnEquity: parseFloat(document.getElementById('returnOnEquity').value),
+                debtRatio: parseFloat(document.getElementById('debtRatio').value),
+                debtEquityRatio: parseFloat(document.getElementById('debtEquityRatio').value),
+                currentRatio: parseFloat(document.getElementById('currentRatio').value)
+            };
+            makePrediction(formData);
+        });
+
+        document.getElementById('dataset-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const companyId = document.getElementById('company_select').value;
+            if (companyId) {
+                makePrediction({ company_id: parseInt(companyId) });
+            } else {
+                const results = document.getElementById('results');
+                results.innerHTML = `
+                    <div style="padding: 20px; background: #fff3cd; border-radius: 8px; border-left: 4px solid #ffc107;">
+                        <strong>⚠️ Please select a company first</strong>
+                    </div>
+                `;
+            }
+        });
+
+        // Initialize
+        loadStatistics();
+        loadCompanies();
+    </script>
+</body>
+</html>
