@@ -3,14 +3,18 @@ Flask API for Credit Risk Modeling with Graph Machine Learning
 Based on Das et al. (2023) - Credit Risk Modeling with Graph Machine Learning
 """
 
-from flask import Flask, jsonify, request, send_from_directory
-from flask_cors import CORS
-from database import CreditRiskDatabase
-from data_loader import CreditRatingDataLoader
-from datetime import datetime
+import os
 import hashlib
 import json
-import os
+from datetime import datetime
+
+import pandas as pd
+import numpy as np
+from flask import Flask, jsonify, request, send_from_directory
+from flask_cors import CORS
+
+from database import CreditRiskDatabase
+from data_loader import CreditRatingDataLoader
 
 app = Flask(__name__, static_folder='static')
 CORS(app)
@@ -58,13 +62,13 @@ def home():
 @app.route('/api/health')
 def health():
     """Health check endpoint"""
-    stats = data_loader.get_statistics()
-    db_stats = db.get_statistics()
+    stats = data_loader.get_statistics() if data_loader else {}
+    db_stats = db.get_statistics() if db else {}
     
     return jsonify({
         'status': 'healthy',
-        'database': 'connected',
-        'dataset_loaded': data_loader.df is not None,
+        'database': 'connected' if db else 'not connected',
+        'dataset_loaded': data_loader is not None and data_loader.df is not None,
         'total_companies': stats.get('total_companies', 0),
         'total_features': stats.get('total_features', 0),
         'total_predictions': db_stats.get('total_predictions', 0),
@@ -136,7 +140,7 @@ def get_companies():
     """Get all companies from dataset"""
     limit = int(request.args.get('limit', 100))
     
-    if data_loader.df is None:
+    if data_loader is None or data_loader.df is None:
         return jsonify({'error': 'Dataset not loaded'}), 500
     
     companies = []
@@ -151,11 +155,20 @@ def get_companies():
         
         # Add key financial metrics
         if 'returnOnAssets' in row:
-            company_data['roa'] = float(row['returnOnAssets'])
+            try:
+                company_data['roa'] = float(row['returnOnAssets'])
+            except Exception:
+                pass
         if 'debtEquityRatio' in row:
-            company_data['debt_equity'] = float(row['debtEquityRatio'])
+            try:
+                company_data['debt_equity'] = float(row['debtEquityRatio'])
+            except Exception:
+                pass
         if 'currentRatio' in row:
-            company_data['current_ratio'] = float(row['currentRatio'])
+            try:
+                company_data['current_ratio'] = float(row['currentRatio'])
+            except Exception:
+                pass
         
         companies.append(company_data)
     
@@ -168,6 +181,9 @@ def get_companies():
 @app.route('/api/company/<int:company_id>', methods=['GET'])
 def get_company_details(company_id):
     """Get detailed information about a specific company"""
+    if data_loader is None:
+        return jsonify({'error': 'Dataset not loaded'}), 500
+
     company_data = data_loader.get_company_data(company_id=company_id)
     
     if not company_data:
@@ -176,11 +192,14 @@ def get_company_details(company_id):
     # Clean the data for JSON serialization
     cleaned_data = {}
     for key, value in company_data.items():
-        if pd.notna(value):
-            if isinstance(value, (np.integer, np.floating)):
-                cleaned_data[key] = float(value)
-            else:
-                cleaned_data[key] = str(value)
+        try:
+            if pd.notna(value):
+                if isinstance(value, (np.integer, np.floating)):
+                    cleaned_data[key] = float(value)
+                else:
+                    cleaned_data[key] = str(value)
+        except Exception:
+            cleaned_data[key] = str(value)
     
     return jsonify({
         'success': True,
@@ -220,8 +239,13 @@ def predict_credit_risk():
             company_name = company_data.get('Name', company_name)
         else:
             # Use provided features
-            features = {k: float(v) for k, v in data.items() 
-                       if k in data_loader.feature_columns}
+            features = {}
+            for k, v in data.items():
+                if k in getattr(data_loader, 'feature_columns', []):
+                    try:
+                        features[k] = float(v)
+                    except Exception:
+                        pass
         
         if not features:
             return jsonify({'error': 'No valid features provided'}), 400
@@ -255,19 +279,20 @@ def predict_credit_risk():
                 'used_graph': False,
                 'graph_cutoff': None
             }
-            db.save_prediction(prediction_data)
+            if db:
+                db.save_prediction(prediction_data)
         except Exception as e:
             print(f"Error saving prediction: {e}")
         
         # Generate recommendations
         recommendations = []
-        if 'debtRatio' in features and features['debtRatio'] > 0.6:
+        if 'debtRatio' in features and features.get('debtRatio', 0) > 0.6:
             recommendations.append('Consider reducing debt ratio below 60%')
-        if 'returnOnAssets' in features and features['returnOnAssets'] < 0.05:
+        if 'returnOnAssets' in features and features.get('returnOnAssets', 0) < 0.05:
             recommendations.append('Work on improving return on assets')
-        if 'currentRatio' in features and features['currentRatio'] < 1.5:
+        if 'currentRatio' in features and features.get('currentRatio', 0) < 1.5:
             recommendations.append('Increase liquidity - target current ratio above 1.5')
-        if 'debtEquityRatio' in features and features['debtEquityRatio'] > 2.0:
+        if 'debtEquityRatio' in features and features.get('debtEquityRatio', 0) > 2.0:
             recommendations.append('High leverage - consider reducing debt-to-equity ratio')
         
         return jsonify({
@@ -332,7 +357,7 @@ def get_predictions():
     limit = int(request.args.get('limit', 50))
     company_id = request.args.get('company_id')
     
-    predictions = db.get_predictions(company_id=company_id, limit=limit)
+    predictions = db.get_predictions(company_id=company_id, limit=limit) if db else []
     
     return jsonify({
         'predictions': predictions,
@@ -343,8 +368,8 @@ def get_predictions():
 @app.route('/api/statistics', methods=['GET'])
 def get_statistics():
     """Get overall statistics"""
-    dataset_stats = data_loader.get_statistics()
-    db_stats = db.get_statistics()
+    dataset_stats = data_loader.get_statistics() if data_loader else {}
+    db_stats = db.get_statistics() if db else {}
     
     return jsonify({
         'dataset': {
@@ -369,7 +394,7 @@ def get_statistics():
 @app.route('/api/dataset/info', methods=['GET'])
 def dataset_info():
     """Get detailed dataset information"""
-    stats = data_loader.get_statistics()
+    stats = data_loader.get_statistics() if data_loader else {}
     
     return jsonify({
         'source': 'Kaggle Corporate Credit Rating Dataset',
@@ -377,11 +402,11 @@ def dataset_info():
         'url': 'https://www.kaggle.com/agewerc/corporate-credit-rating',
         'statistics': stats,
         'features': {
-            'liquidity_ratios': data_loader.ratio_features['liquidity'],
-            'profitability_ratios': data_loader.ratio_features['profitability'],
-            'debt_ratios': data_loader.ratio_features['debt'],
-            'operating_performance': data_loader.ratio_features['operating_performance'],
-            'cash_flow_ratios': data_loader.ratio_features['cash_flow']
+            'liquidity_ratios': getattr(data_loader, 'ratio_features', {}).get('liquidity', []),
+            'profitability_ratios': getattr(data_loader, 'ratio_features', {}).get('profitability', []),
+            'debt_ratios': getattr(data_loader, 'ratio_features', {}).get('debt', []),
+            'operating_performance': getattr(data_loader, 'ratio_features', {}).get('operating_performance', []),
+            'cash_flow_ratios': getattr(data_loader, 'ratio_features', {}).get('cash_flow', [])
         },
         'methodology': {
             'graph_construction': 'SEC Filing MD&A Similarity (doc2vec + cosine similarity)',
@@ -401,35 +426,28 @@ def serve_app():
 
 
 if __name__ == '__main__':
-    import pandas as pd
-    import numpy as np
-    
     print("=" * 80)
     print("🎯 Credit Risk Modeling with Graph Machine Learning")
-    
     print("=" * 80)
     
-    # Load dataset statistics
-    dataset_stats = data_loader.get_statistics()
-    if dataset_stats:
-        print(f"\n📊 Dataset Information:")
-        print(f"   Total Companies: {dataset_stats.get('total_companies', 0)}")
-        print(f"   Total Features: {dataset_stats.get('total_features', 0)}")
-        print(f"   Investment Grade Ratio: {dataset_stats.get('investment_grade_ratio', 0)*100:.1f}%")
-        
-        if 'rating_distribution' in dataset_stats:
-            print(f"\n📈 Rating Distribution:")
-            for rating, count in sorted(dataset_stats['rating_distribution'].items(), 
-                                       key=lambda x: x[1], reverse=True)[:5]:
-                print(f"      {rating}: {count}")
+    # Print dataset summary if available
+    if data_loader:
+        dataset_stats = data_loader.get_statistics()
+        if dataset_stats:
+            print(f"\n📊 Dataset Information:")
+            print(f"   Total Companies: {dataset_stats.get('total_companies', 0)}")
+            print(f"   Total Features: {dataset_stats.get('total_features', 0)}")
+            print(f"   Investment Grade Ratio: {dataset_stats.get('investment_grade_ratio', 0)*100:.1f}%")
+            if 'rating_distribution' in dataset_stats:
+                print(f"\n📈 Rating Distribution:")
+                for rating, count in sorted(dataset_stats['rating_distribution'].items(), 
+                                           key=lambda x: x[1], reverse=True)[:5]:
+                    print(f"      {rating}: {count}")
     else:
         print(f"\n⚠️  Dataset not found. Please download from:")
         print(f"   https://www.kaggle.com/agewerc/corporate-credit-rating")
-        print(f"   Place as: corporate_credit_rating.csv")
+        print(f"   Place as: corporate_rating.csv")
     
     print("\n" + "=" * 80)
-    print("🌐 Server: http://localhost:5000")
-    print("📚 API Docs: http://localhost:5000/api/dataset/info")
-    print("=" * 80)
-    
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=True, host='0.0.0.0', port=port)
